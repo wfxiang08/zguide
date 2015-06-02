@@ -34,8 +34,7 @@ def worker_thread(worker_url, context, i):
 
             address, empty, request = socket.recv_multipart()
 
-            print("%s: %s\n" % (socket.identity.decode('ascii'),
-                                request.decode('ascii')), end='')
+            print("%s: %s\n" % (socket.identity.decode('ascii'), request.decode('ascii')), end='')
 
             socket.send_multipart([address, b'', b'OK'])
 
@@ -58,8 +57,7 @@ def client_thread(client_url, context, i):
     socket.send(b"HELLO")
     reply = socket.recv()
 
-    print("%s: %s\n" % (socket.identity.decode('ascii'),
-                        reply.decode('ascii')), end='')
+    print("%s: %s\n" % (socket.identity.decode('ascii'), reply.decode('ascii')), end='')
 
 
 def main():
@@ -117,6 +115,8 @@ def main():
             message = backend.recv_multipart()
             assert available_workers < NBR_WORKERS
 
+            # 来自worker的请求
+            # (worker_addr, b"", xxxxx)
             worker_addr = message[0]
 
             # add worker back to the list of workers
@@ -130,6 +130,9 @@ def main():
             # Third frame is READY or else a client reply address
             client_addr = message[2]
 
+            # message格式
+            # 要么为: ("READY", )
+            # 要么为: (client_address, b"", response)
             # If client reply, send rest back to frontend
             if client_addr != b'READY':
 
@@ -141,8 +144,8 @@ def main():
 
                 frontend.send_multipart([client_addr, b"", reply])
 
-                client_nbr -= 1
 
+                client_nbr -= 1
                 if client_nbr == 0:
                     break  # Exit after N messages
 
@@ -152,15 +155,21 @@ def main():
             if (frontend in socks and socks[frontend] == zmq.POLLIN):
                 # Now get next client request, route to LRU worker
                 # Client request is [address][empty][request]
-
+                #
+                # 来自client的消息(client_address, b"", request)
+                #
                 [client_addr, empty, request] = frontend.recv_multipart()
 
                 assert empty == b""
 
                 #  Dequeue and drop the next worker address
+                #
+                # 转给某一个workers
+                #
                 available_workers += -1
                 worker_id = workers_list.pop()
 
+                # 路由: (worker_id, b"", client_address, b"", request)
                 backend.send_multipart([worker_id, b"",
                                         client_addr, b"", request])
 

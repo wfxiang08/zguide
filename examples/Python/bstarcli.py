@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from time import sleep
 import zmq
 
@@ -9,9 +10,12 @@ SETTLE_DELAY = 2000  # before failing over
 def main():
     server = ['tcp://localhost:5001', 'tcp://localhost:5002']
     server_nbr = 0
+
     ctx = zmq.Context()
     client = ctx.socket(zmq.REQ)
     client.connect(server[server_nbr])
+
+
     poller = zmq.Poller()
     poller.register(client, zmq.POLLIN)
 
@@ -24,9 +28,11 @@ def main():
             socks = dict(poller.poll(REQUEST_TIMEOUT))
             if socks.get(client) == zmq.POLLIN:
                 reply = client.recv_string()
+
+                # 获取到反馈
                 if int(reply) == sequence:
                     print("I: server replied OK (%s)" % reply)
-                    expect_reply = False
+                    expect_reply = False # 结束请求
                     sequence += 1
                     sleep(1)
                 else:
@@ -36,6 +42,9 @@ def main():
                 sleep(SETTLE_DELAY / 1000)
                 poller.unregister(client)
                 client.close()
+
+                # 长时间没有数据返回，则认为服务器挂了?
+                # 如何处理Fail Over呢?
                 server_nbr = (server_nbr + 1) % 2
                 print("I: connecting to server at %s.." % server[server_nbr])
                 client = ctx.socket(zmq.REQ)

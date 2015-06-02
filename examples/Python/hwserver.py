@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 #
 #   Hello World server in Python
 #   Binds REP socket to tcp://*:5555
@@ -8,6 +9,7 @@ import time
 import zmq
 
 context = zmq.Context()
+# 创建服务器Socket: REQ <--> REP
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5555")
 

@@ -7,6 +7,9 @@ import time
 
 from zhelpers import zmq
 
+
+# PUB/SUB暂时不看
+
 STATE_PRIMARY = 1
 STATE_BACKUP = 2
 STATE_ACTIVE = 3

@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 """
 Asynchronous request-reply single-threaded server in Python
 that spawns a request handler each time a request is received
@@ -32,23 +33,30 @@ NUMBER_OF_CLIENTS = 100
 PROCESSING_TIME = 5
 
 
+# 启动了Server/Client
+# 如何交互呢?
+
 class Client(threading.Thread):
     def __init__(self, identity):
         threading.Thread.__init__(self)
         self.identity = '{}{}'.format('id_', identity)
 
     def run(self):
+        # DEALER如何工作呢?
         context = zmq.Context()
         socket = context.socket(zmq.DEALER)
         socket.setsockopt(zmq.IDENTITY, self.identity)
         socket.connect('tcp://localhost:5570')
+
         print 'Client %s started\n' % self.identity
         poll = zmq.Poller()
         poll.register(socket, zmq.POLLIN)
 
+        # DEALER 似乎自动添加了identity
         socket.send('[request from client %s]' % self.identity)
         print 'Req from client %s sent.\n' % self.identity
 
+        # 接受到一个消息就OVER
         received_reply = False
         while not received_reply:
             sockets = dict(poll.poll(1000))
@@ -76,6 +84,8 @@ class Server(threading.Thread):
 
     def run(self):
         context = zmq.Context()
+
+        # Rounter, Dealer如何工作呢？
         frontend = context.socket(zmq.ROUTER)
         frontend.bind('tcp://*:5570')
 
@@ -88,16 +98,19 @@ class Server(threading.Thread):
 
         while not self.stopped():
             sockets = dict(poll.poll(1000))
+
             if frontend in sockets:
                 if sockets[frontend] == zmq.POLLIN:
                     _id = frontend.recv()
                     msg = frontend.recv()
                     print 'Server received %s\n' % msg
-
+                    # 异步将 Router接受到的消息交给Backend(线程!!!)
                     handler = RequestHandler(context, _id, msg)
                     handler.start()
 
             if backend in sockets:
+                # backend接受消息，然后再返回给frontend
+                # 注意这里的 空消息 没有使用
                 if sockets[backend] == zmq.POLLIN:
                     _id = backend.recv()
                     msg = backend.recv()
@@ -132,6 +145,7 @@ class RequestHandler(threading.Thread):
         # Simulate a long-running operation
         time.sleep(PROCESSING_TIME)
 
+        # 发送: id, msg到backend
         worker.send(self._id, zmq.SNDMORE)
         worker.send(self.msg)
         del self.msg
@@ -147,6 +161,7 @@ def main():
     starttime = datetime.now()
 
     # Start multiple clients which will each send a request that takes a while to process
+    # 1. 启动多个client(100个)
     clients = []
     for i in xrange(NUMBER_OF_CLIENTS):
         client = Client(i)

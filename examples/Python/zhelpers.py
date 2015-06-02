@@ -19,9 +19,12 @@ def dump(msg_or_socket):
         msg = msg_or_socket.recv_multipart()
     else:
         msg = msg_or_socket
+
     print("----------------------------------------")
     for part in msg:
+        # 行结束符临时换为" ", 防止换行，还可以有一个空格
         print("[%03d]" % len(part), end=' ')
+
         is_text = True
         try:
             print(part.decode('ascii'))

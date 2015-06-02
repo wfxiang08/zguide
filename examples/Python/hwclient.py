@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 #
 #   Hello World client in Python
 #   Connects REQ socket to tcp://localhost:5555

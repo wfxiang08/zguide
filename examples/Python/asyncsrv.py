@@ -1,4 +1,4 @@
-
+# -*- encoding: utf-8 -*-
 import zmq
 import sys
 import threading
@@ -13,6 +13,14 @@ def tprint(msg):
     sys.stdout.write(msg + '\n')
     sys.stdout.flush()
 
+#  ROUTER(bind) <--> DEALER(bind)
+#  1. client DEALER 直接连接到 ROUTER
+#  2. server DEALER 直接连接到 DEALER
+#
+# 实在不明白, DEALER是什么东西?
+#
+
+
 class ClientTask(threading.Thread):
     """ClientTask"""
     def __init__(self, id):
@@ -22,8 +30,9 @@ class ClientTask(threading.Thread):
     def run(self):
         context = zmq.Context()
         socket = context.socket(zmq.DEALER)
-        identity = u'worker-%d' % self.id
+        identity = u'client-%d' % self.id
         socket.identity = identity.encode('ascii')
+
         socket.connect('tcp://localhost:5570')
         print('Client %s started' % (identity))
         poll = zmq.Poller()
@@ -36,6 +45,7 @@ class ClientTask(threading.Thread):
             for i in range(5):
                 sockets = dict(poll.poll(1000))
                 if socket in sockets:
+                    # 最终的socket是看不到identity等东西的
                     msg = socket.recv()
                     tprint('Client %s received: %s' % (identity, msg))
 
@@ -49,9 +59,12 @@ class ServerTask(threading.Thread):
 
     def run(self):
         context = zmq.Context()
+
+        # 负责异步接受信息
         frontend = context.socket(zmq.ROUTER)
         frontend.bind('tcp://*:5570')
 
+        # 负责异步处理信息
         backend = context.socket(zmq.DEALER)
         backend.bind('inproc://backend')
 
@@ -65,12 +78,18 @@ class ServerTask(threading.Thread):
         poll.register(frontend, zmq.POLLIN)
         poll.register(backend,  zmq.POLLIN)
 
+        # --> frontend <----> backend <---> frontend <---> client
+        #     ROUTER <--> DEALER <---> zmq.DEALER(连接到DEALER)
         while True:
             sockets = dict(poll.poll())
             if frontend in sockets:
+                # Router需要身份信息
                 ident, msg = frontend.recv_multipart()
                 tprint('Server received %s id %s' % (msg, ident))
+
+                # backend将这些信息交给谁呢?
                 backend.send_multipart([ident, msg])
+
             if backend in sockets:
                 ident, msg = backend.recv_multipart()
                 tprint('Sending to frontend %s id %s' % (msg, ident))
@@ -87,16 +106,20 @@ class ServerWorker(threading.Thread):
         self.context = context
 
     def run(self):
+        # 接受信息，准备replies
         worker = self.context.socket(zmq.DEALER)
         worker.connect('inproc://backend')
         tprint('Worker started')
+
         while True:
+            # 每个消息都会有一个id, msg
             ident, msg = worker.recv_multipart()
-            tprint('Worker received %s from %s' % (msg, ident))
-            replies = randint(0,4)
+            tprint('----> Worker received %s from %s' % (msg, ident))
+
+            replies = 3
             for i in range(replies):
                 time.sleep(1. / (randint(1,10)))
-                worker.send_multipart([ident, msg])
+                worker.send_multipart([ident, "MSG: %s, Index: %s" % (msg, i)])
 
         worker.close()
 
